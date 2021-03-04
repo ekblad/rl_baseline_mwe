@@ -210,4 +210,3 @@ dependencies:
     - tensorflow-estimator==2.4.0
     - urllib3==1.26.2
     - wheel==0.36.2
-prefix: /Users/gdst/anaconda3/envs/tf
