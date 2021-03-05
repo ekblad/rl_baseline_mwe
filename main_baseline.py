@@ -15,15 +15,7 @@ from models import *
 # based on example at: https://keras.io/examples/rl/ddpg_pendulum/
 
 def main():
-	old_trial = 'weights'
-	trial = 'c6_noflood'
-
-	BASE_DIR = Path.cwd() 
-	# DATA_DIR = BASE_DIR / 'data' in general case
-	DATA_DIR = BASE_DIR # for this repo
-	OLD_DIR = BASE_DIR / '{}'.format(old_trial)
-	STOR_DIR = BASE_DIR / 'trial_{}'.format(trial)
-	STOR_DIR.mkdir(exist_ok=True)
+	DATA_DIR = Path.cwd()
 
 	num_res_states = 2
 	inf_stack = 1
@@ -52,20 +44,16 @@ def main():
 	ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1)) # not currently used
 
 	actor_model = get_actor(env)
-	actor_model.load_weights(OLD_DIR / 'actor_1212ep.h5')
 	print(actor_model.summary())
 	critic_model = get_critic(env)
-	critic_model.load_weights(OLD_DIR / 'critic_1212ep.h5')
 	print(critic_model.summary())
 
 	target_actor = get_actor(env)
-	target_actor.load_weights(OLD_DIR / 'target_actor_1212ep.h5')
 	target_critic = get_critic(env)
-	target_critic.load_weights(OLD_DIR / 'target_critic_1212ep.h5')
 
 	# making the weights equal initially:
-	# target_actor.set_weights(actor_model.get_weights())
-	# target_critic.set_weights(critic_model.get_weights())
+	target_actor.set_weights(actor_model.get_weights())
+	target_critic.set_weights(critic_model.get_weights())
 
 	# learning rate for actor-critic models:
 	actor_lr = 10e-8 # slowest learner
@@ -123,7 +111,7 @@ def main():
 				state, reward, info = env.step(action)
 				res_state = state
 				ens_done, epi_done = info['ens_done'], info['epi_done']
-				if env.t % 100 == 0:
+				if env.t % 10 == 0:
 					print('|| Ep: {} ||'.format('{:1.0f}'.format(epi_count)),
 						't: {} ||'.format('{:5.0f}'.format(env.t)),
 						'dowy: {} ||'.format('{:3.0f}'.format(env.dowy)),
@@ -152,11 +140,11 @@ def main():
 			avg_action_list.append(average_action)
 
 			# save the weights every episode (this could be too frequent)
-			actor_model.save_weights(STOR_DIR / "actor_{}ep.h5".format(epi_count))
-			critic_model.save_weights(STOR_DIR / "critic_{}ep.h5".format(epi_count))
+			# actor_model.save_weights(STOR_DIR / "actor_{}ep.h5".format(epi_count))
+			# critic_model.save_weights(STOR_DIR / "critic_{}ep.h5".format(epi_count))
 
-			target_actor.save_weights(STOR_DIR / "target_actor_{}ep.h5".format(epi_count))
-			target_critic.save_weights(STOR_DIR / "target_critic_{}ep.h5".format(epi_count))
+			# target_actor.save_weights(STOR_DIR / "target_actor_{}ep.h5".format(epi_count))
+			# target_critic.save_weights(STOR_DIR / "target_critic_{}ep.h5".format(epi_count))
 
 	# plot results and store DataFrame
 	plot_df = {'Episodic Rewards': epi_reward_list,
