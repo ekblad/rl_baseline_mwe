@@ -36,7 +36,7 @@ def get_actor(env):
 	out = layers.Dense(64,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)		
 	out = layers.Dense(64,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(out)
 	out = layers.Dense(1,activation='sigmoid',kernel_initializer=last_init,kernel_regularizer='l2')(out)
-	out = out*env.action_space.high[0]
+	out = env.action_space.low[0] + out*(env.action_space.high[0] - env.action_space.low[0])
 	model = tf.keras.Model(res_input,out)
 	return model
 

@@ -19,7 +19,7 @@ def main():
 
 	num_res_states = 2
 	inf_stack = 1
-	epi_steps = 1500 # about 5 years
+	epi_steps = 10 * 365
 
 	env = FolsomEnv(res_dim=(num_res_states,),inflow_stack=inf_stack, epi_length=epi_steps) # policy: storage, inflows, day of year
 	obs = env.reset(DATA_DIR,model='canesm2',ens='r1i1p1')
@@ -74,8 +74,8 @@ def main():
 	# discount factor for future rewards
 	gamma = 0.99
 
-	batch_size = 64
-	buffer_capacity = 15000 # about 50 years
+	batch_size = 365
+	buffer_capacity = 15000 
 	buffer = Buffer(actor_opt,critic_opt,num_states,num_res_states,num_actions,buffer_capacity,batch_size,gamma)
 
 	"""
@@ -97,9 +97,9 @@ def main():
 		ens_done = False
 		average_reward = 0
 		average_action = 0
-		prev_state = env.reset(DATA_DIR,model='canesm2',ens=ens,epi_count=epi_count)
-		prev_res_state = prev_state
 		while ens_done == False:
+			prev_state = env.reset(DATA_DIR,model='canesm2',ens=ens,epi_count=epi_count)
+			prev_res_state = prev_state
 			episodic_reward = 0
 			episodic_action = 0
 			epi_done = False
@@ -112,19 +112,19 @@ def main():
 				state, reward, info = env.step(action)
 				res_state = state
 				ens_done, epi_done = info['ens_done'], info['epi_done']
-				if env.t % 10 == 0:
-					print('|| Ep: {} ||'.format('{:1.0f}'.format(epi_count)),
-						't: {} ||'.format('{:5.0f}'.format(env.t)),
-						'dowy: {} ||'.format('{:3.0f}'.format(env.dowy)),
-						'R: {} ||'.format('{:7.0f}'.format(reward)),
-						'Ep. R: {} ||'.format('{:8.0f}'.format(episodic_reward)),
-						'Avg. R: {} ||'.format('{:4.0f}'.format(average_reward)),
-						'S: {} ||'.format('{:3.0f}'.format(env.S[env.t])),
-						'A: {} ||'.format('{:3.0f}'.format(env.action)), 
-						'Avg. A: {} ||'.format('{:3.0f}'.format(average_action)),	
-						'I: {} ||'.format('{:3.0f}'.format(env.Q[env.t])),							
-						'O: {} ||'.format('{:3.0f}'.format(env.R[env.t])),
-						)
+				# if env.t % 10 == 0:
+				# 	print('|| Ep: {} ||'.format('{:1.0f}'.format(epi_count)),
+				# 		't: {} ||'.format('{:5.0f}'.format(env.t)),
+				# 		'dowy: {} ||'.format('{:3.0f}'.format(env.dowy)),
+				# 		'R: {} ||'.format('{:7.0f}'.format(reward)),
+				# 		'Ep. R: {} ||'.format('{:8.0f}'.format(episodic_reward)),
+				# 		'Avg. R: {} ||'.format('{:4.0f}'.format(average_reward)),
+				# 		'S: {} ||'.format('{:3.0f}'.format(env.S[env.t])),
+				# 		'A: {} ||'.format('{:3.0f}'.format(env.action)), 
+				# 		'Avg. A: {} ||'.format('{:3.0f}'.format(average_action)),	
+				# 		'I: {} ||'.format('{:3.0f}'.format(env.Q[env.t])),							
+				# 		'O: {} ||'.format('{:3.0f}'.format(env.R[env.t])),
+				# 		)
 				buffer.record((prev_state, prev_res_state, action, reward, state, res_state))
 				episodic_reward += reward
 				average_reward = average_reward+(reward-average_reward)/env.t

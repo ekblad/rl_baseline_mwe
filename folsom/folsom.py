@@ -70,7 +70,7 @@ class FolsomEnv():
 
 		# Define action and observation space
 		# They must be gym.spaces objects
-		self.action_space = spaces.Box(low=0, high=10,shape=(1,),dtype=float) # instead of self.max_safe_release*self.cfs_to_taf
+		self.action_space = spaces.Box(low=-5, high=5, shape=(1,),dtype=float) # instead of self.max_safe_release*self.cfs_to_taf
 		# Example for using image as input:
 		self.reservoir_space = spaces.Box(low=np.array([0., 0.,]), 
 			high=np.array([self.K,365]),shape=self.res_dim,dtype=np.float32)		
@@ -102,7 +102,7 @@ class FolsomEnv():
 
 		# reinit. reservoir model
 		self.runup_days = max(self.stack,self.inflow_stack)
-		self.t = self.runup_days
+		self.t = 0 # self.runup_days # reset to beginning of episode
 		self.doy = (self.t+1) % 365
 		self.dowy = self.dowy_vect[self.doy-1]
 		self.S, self.R, self.target, self.shortage_cost, self.overage_cost, self.flood_cost = [np.zeros(self.T) for _ in range(6)]
@@ -139,7 +139,7 @@ class FolsomEnv():
 		# 	self.target[self.t] = max(0.2 * (self.Q[self.t] + self.S[self.t - 1] - tocs(self.dowy[self.t])), self.target[self.t])
 		# else:
 		# self.target[self.t] = max(self.D[self.t],self.action)
-		self.target[self.t] = self.action
+		self.target[self.t] = self.D[self.t] + self.action
 		self.R[self.t] = min(self.target[self.t], self.S[self.t - 1] + self.Q[self.t-1])
 		self.R[self.t] = min(self.R[self.t], max_release(self.S[self.t - 1]))
 		# self.R[self.t] = max(self.action,0)
