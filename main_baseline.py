@@ -56,10 +56,10 @@ def main():
 	target_critic.set_weights(critic_model.get_weights())
 
 	# learning rate for actor-critic models:
-	actor_lr = 10e-6 # slowest learner
-	critic_lr = 10e-5 # should learn faster than actor
+	actor_lr = 10e-5 # slowest learner
+	critic_lr = 10e-4 # should learn faster than actor
 	# learning rate used to update target networks:
-	tau = 10e-4 # both actor and critic should chase the target actor and critic networks
+	tau = 10e-3 # both actor and critic should chase the target actor and critic networks
 
 	# initialize optimizers:
 	clipnorm = 0.01
@@ -128,17 +128,21 @@ def main():
 				episodic_reward += reward
 				average_reward = average_reward+(reward-average_reward)/env.t
 				average_action = average_action+(action[0]-average_action)/env.t
+
 				if env.t > batch_size*epi_count or epi_count*epi_steps > env.T: # don't learn until at least a full batch is in buffer
 					target_actor,target_critic,actor_model,critic_model = buffer.learn(target_actor,target_critic,actor_model,critic_model)
 					update_target(target_actor.variables, actor_model.variables, tau)
 					update_target(target_critic.variables, critic_model.variables, tau)
+				
 				prev_state = state
 				prev_res_state = res_state
+
 
 			epi_reward_list.append(episodic_reward)
 			avg_reward_list.append(average_reward)
 			avg_action_list.append(average_action)
-
+			print("Episode * {} * Avg Reward is ==> {}".format(epi_count, np.mean(epi_reward_list[-40:])))
+			
 			# save the weights every episode (this could be too frequent)
 			# actor_model.save_weights(STOR_DIR / "actor_{}ep.h5".format(epi_count))
 			# critic_model.save_weights(STOR_DIR / "critic_{}ep.h5".format(epi_count))

@@ -42,7 +42,7 @@ class FolsomEnv():
 	Accepts image data as input, daily time step.
 	"""
 	# metadata = {'render.modes': ['console']} # for rendering observations/data as print output, image, video, etc.
-	reward_range = (-float('inf'), float('inf'))
+	# reward_range = (-float('inf'), float('inf')) # not used 
 	# constants
 	cfs_to_taf = 2.29568411 * 10**-5 * 86400 / 1000
 	taf_to_cfs = 1000 / 86400 * 43560
@@ -69,7 +69,7 @@ class FolsomEnv():
 
 		# Define action and observation space
 		# They must be gym.spaces objects
-		self.action_space = spaces.Box(low=0, high=self.max_safe_release*self.cfs_to_taf,shape=(1,),dtype=float)
+		self.action_space = spaces.Box(low=0, high=10,shape=(1,),dtype=float) # instead of self.max_safe_release*self.cfs_to_taf
 		# Example for using image as input:
 		self.reservoir_space = spaces.Box(low=np.array([0., 0.,]+[0. for i in np.arange(self.inflow_stack)]), 
 			high=np.array([self.K,365]+[self.Q_max for i in np.arange(self.inflow_stack)]),shape=self.res_dim,dtype=np.float32)		
