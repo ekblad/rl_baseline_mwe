@@ -56,10 +56,10 @@ def main():
 	target_critic.set_weights(critic_model.get_weights())
 
 	# learning rate for actor-critic models:
-	actor_lr = 10e-8 # slowest learner
-	critic_lr = 10e-7 # should learn faster than actor
+	actor_lr = 10e-6 # slowest learner
+	critic_lr = 10e-5 # should learn faster than actor
 	# learning rate used to update target networks:
-	tau = 10e-6 # both actor and critic should chase the target actor and critic networks
+	tau = 10e-4 # both actor and critic should chase the target actor and critic networks
 
 	# initialize optimizers:
 	clipnorm = 0.01
@@ -72,9 +72,9 @@ def main():
 	# discount factor for future rewards
 	gamma = 0.99
 
-	batch_size = 8
-	epi_steps = 5000
-	buffer_capacity = 10000
+	batch_size = 64
+	epi_steps = 1500 # about 5 years
+	buffer_capacity = 15000 # about 50 years
 	buffer = Buffer(actor_opt,critic_opt,num_states,num_res_states,num_actions,buffer_capacity,batch_size,gamma)
 
 	"""
