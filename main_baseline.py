@@ -19,7 +19,9 @@ def main():
 
 	num_res_states = 2
 	inf_stack = 1
-	env = FolsomEnv(res_dim=(num_res_states+inf_stack,),inflow_stack=inf_stack) # policy: storage, inflows, day of year
+	epi_steps = 1500 # about 5 years
+
+	env = FolsomEnv(res_dim=(num_res_states,),inflow_stack=inf_stack, epi_length=epi_steps) # policy: storage, inflows, day of year
 	obs = env.reset(DATA_DIR,model='canesm2',ens='r1i1p1')
 
 	# Get the environment and extract the number of actions.
@@ -56,10 +58,10 @@ def main():
 	target_critic.set_weights(critic_model.get_weights())
 
 	# learning rate for actor-critic models:
-	actor_lr = 10e-5 # slowest learner
-	critic_lr = 10e-4 # should learn faster than actor
+	actor_lr = 10e-6 # slowest learner
+	critic_lr = 10e-5 # should learn faster than actor
 	# learning rate used to update target networks:
-	tau = 10e-3 # both actor and critic should chase the target actor and critic networks
+	tau = 10e-4 # both actor and critic should chase the target actor and critic networks
 
 	# initialize optimizers:
 	clipnorm = 0.01
@@ -73,7 +75,6 @@ def main():
 	gamma = 0.99
 
 	batch_size = 64
-	epi_steps = 1500 # about 5 years
 	buffer_capacity = 15000 # about 50 years
 	buffer = Buffer(actor_opt,critic_opt,num_states,num_res_states,num_actions,buffer_capacity,batch_size,gamma)
 

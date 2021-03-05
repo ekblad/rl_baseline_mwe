@@ -47,7 +47,7 @@ class FolsomEnv():
 	cfs_to_taf = 2.29568411 * 10**-5 * 86400 / 1000
 	taf_to_cfs = 1000 / 86400 * 43560
 
-	def __init__(self, obs_dim = None, res_dim = None, forecast = False, stack = 0, inflow_stack = 0): 
+	def __init__(self, obs_dim = None, res_dim = None, forecast = False, stack = 0, inflow_stack = 0, epi_length = 1000): 
 		super(FolsomEnv,self).__init__()
 
 		self.forecast = forecast
@@ -57,6 +57,7 @@ class FolsomEnv():
 		self.inflow_stack = inflow_stack
 		self.cfs_to_taf = 2.29568411 * 10**-5 * 86400 / 1000
 		self.taf_to_cfs = 1000 / 86400 * 43560
+		self.epi_length = epi_length
 
 		# initialize reservoir model
 		self.K = 975  # capacity, TAF
@@ -71,8 +72,8 @@ class FolsomEnv():
 		# They must be gym.spaces objects
 		self.action_space = spaces.Box(low=0, high=10,shape=(1,),dtype=float) # instead of self.max_safe_release*self.cfs_to_taf
 		# Example for using image as input:
-		self.reservoir_space = spaces.Box(low=np.array([0., 0.,]+[0. for i in np.arange(self.inflow_stack)]), 
-			high=np.array([self.K,365]+[self.Q_max for i in np.arange(self.inflow_stack)]),shape=self.res_dim,dtype=np.float32)		
+		self.reservoir_space = spaces.Box(low=np.array([0., 0.,]), 
+			high=np.array([self.K,365]),shape=self.res_dim,dtype=np.float32)		
 		if self.obs_dim is not None:
 			self.observation_space = spaces.Box(low=0, high=255,shape=self.obs_dim,dtype=np.uint8)
 		else:
@@ -125,7 +126,7 @@ class FolsomEnv():
 				print('Observation : ',self.observation_space.shape)
 				if self.forecast:
 					print('Forecast: (add description later)')
-			self.observation = np.array([self.S[self.t],float(self.doy),]+[self.Q[self.t-i] for i in np.arange(0,self.inflow_stack)])
+			self.observation = np.array([self.S[self.t],float(self.doy),])
 
 		return self.observation
 
@@ -160,10 +161,10 @@ class FolsomEnv():
 		if self.obs_dim is not None:
 			self.observation = self.data[(self.t-self.stack):self.t,:,:,:]
 		else:
-			self.observation = np.array([self.S[self.t],float(self.doy),]+[self.Q[self.t-i] for i in np.arange(0,self.inflow_stack)])
+			self.observation = np.array([self.S[self.t],float(self.doy),])
 
 		self.info = {'epi_done':False,'ens_done':False}
-		if self.t % 5000 == 0:
+		if self.t % self.epi_length == 0:
 			self.info['epi_done'] = True	
 		if self.t == self.T - 1:			
 			self.info['ens_done'], self.info['epi_done'] = True, True
