@@ -15,19 +15,13 @@ from models import *
 # based on example at: https://keras.io/examples/rl/ddpg_pendulum/
 
 def main():
-	old_trial = 'weights'
-	trial = 'c6_noflood'
-
-	BASE_DIR = Path.cwd() 
-	# DATA_DIR = BASE_DIR / 'data' in general case
-	DATA_DIR = BASE_DIR # for this repo
-	OLD_DIR = BASE_DIR / '{}'.format(old_trial)
-	STOR_DIR = BASE_DIR / 'trial_{}'.format(trial)
-	STOR_DIR.mkdir(exist_ok=True)
+	DATA_DIR = Path.cwd()
 
 	num_res_states = 2
 	inf_stack = 1
-	env = FolsomEnv(res_dim=(num_res_states+inf_stack,),inflow_stack=inf_stack) # policy: storage, inflows, day of year
+	epi_steps = 10 * 365
+
+	env = FolsomEnv(res_dim=(num_res_states,),inflow_stack=inf_stack, epi_length=epi_steps) # policy: storage, inflows, day of year
 	obs = env.reset(DATA_DIR,model='canesm2',ens='r1i1p1')
 
 	# Get the environment and extract the number of actions.
@@ -52,26 +46,22 @@ def main():
 	ou_noise = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1)) # not currently used
 
 	actor_model = get_actor(env)
-	actor_model.load_weights(OLD_DIR / 'actor_1212ep.h5')
 	print(actor_model.summary())
 	critic_model = get_critic(env)
-	critic_model.load_weights(OLD_DIR / 'critic_1212ep.h5')
 	print(critic_model.summary())
 
 	target_actor = get_actor(env)
-	target_actor.load_weights(OLD_DIR / 'target_actor_1212ep.h5')
 	target_critic = get_critic(env)
-	target_critic.load_weights(OLD_DIR / 'target_critic_1212ep.h5')
 
 	# making the weights equal initially:
-	# target_actor.set_weights(actor_model.get_weights())
-	# target_critic.set_weights(critic_model.get_weights())
+	target_actor.set_weights(actor_model.get_weights())
+	target_critic.set_weights(critic_model.get_weights())
 
 	# learning rate for actor-critic models:
-	actor_lr = 10e-8 # slowest learner
-	critic_lr = 10e-7 # should learn faster than actor
+	actor_lr = 10e-6 # slowest learner
+	critic_lr = 10e-5 # should learn faster than actor
 	# learning rate used to update target networks:
-	tau = 10e-6 # both actor and critic should chase the target actor and critic networks
+	tau = 10e-4 # both actor and critic should chase the target actor and critic networks
 
 	# initialize optimizers:
 	clipnorm = 0.01
@@ -84,9 +74,8 @@ def main():
 	# discount factor for future rewards
 	gamma = 0.99
 
-	batch_size = 8
-	epi_steps = 5000
-	buffer_capacity = 10000
+	batch_size = 365
+	buffer_capacity = 15000 
 	buffer = Buffer(actor_opt,critic_opt,num_states,num_res_states,num_actions,buffer_capacity,batch_size,gamma)
 
 	"""
@@ -108,9 +97,9 @@ def main():
 		ens_done = False
 		average_reward = 0
 		average_action = 0
-		prev_state = env.reset(DATA_DIR,model='canesm2',ens=ens,epi_count=epi_count)
-		prev_res_state = prev_state
 		while ens_done == False:
+			prev_state = env.reset(DATA_DIR,model='canesm2',ens=ens,epi_count=epi_count)
+			prev_res_state = prev_state
 			episodic_reward = 0
 			episodic_action = 0
 			epi_done = False
@@ -123,7 +112,7 @@ def main():
 				state, reward, info = env.step(action)
 				res_state = state
 				ens_done, epi_done = info['ens_done'], info['epi_done']
-				if env.t % 100 == 0:
+				if env.t % 10 == 0:
 					print('|| Ep: {} ||'.format('{:1.0f}'.format(epi_count)),
 						't: {} ||'.format('{:5.0f}'.format(env.t)),
 						'dowy: {} ||'.format('{:3.0f}'.format(env.dowy)),
@@ -140,23 +129,27 @@ def main():
 				episodic_reward += reward
 				average_reward = average_reward+(reward-average_reward)/env.t
 				average_action = average_action+(action[0]-average_action)/env.t
+
 				if env.t > batch_size*epi_count or epi_count*epi_steps > env.T: # don't learn until at least a full batch is in buffer
 					target_actor,target_critic,actor_model,critic_model = buffer.learn(target_actor,target_critic,actor_model,critic_model)
 					update_target(target_actor.variables, actor_model.variables, tau)
 					update_target(target_critic.variables, critic_model.variables, tau)
+				
 				prev_state = state
 				prev_res_state = res_state
+
 
 			epi_reward_list.append(episodic_reward)
 			avg_reward_list.append(average_reward)
 			avg_action_list.append(average_action)
-
+			print("Episode * {} * Avg Reward is ==> {}".format(epi_count, np.mean(epi_reward_list[-40:])))
+			
 			# save the weights every episode (this could be too frequent)
-			actor_model.save_weights(STOR_DIR / "actor_{}ep.h5".format(epi_count))
-			critic_model.save_weights(STOR_DIR / "critic_{}ep.h5".format(epi_count))
+			# actor_model.save_weights(STOR_DIR / "actor_{}ep.h5".format(epi_count))
+			# critic_model.save_weights(STOR_DIR / "critic_{}ep.h5".format(epi_count))
 
-			target_actor.save_weights(STOR_DIR / "target_actor_{}ep.h5".format(epi_count))
-			target_critic.save_weights(STOR_DIR / "target_critic_{}ep.h5".format(epi_count))
+			# target_actor.save_weights(STOR_DIR / "target_actor_{}ep.h5".format(epi_count))
+			# target_critic.save_weights(STOR_DIR / "target_critic_{}ep.h5".format(epi_count))
 
 	# plot results and store DataFrame
 	plot_df = {'Episodic Rewards': epi_reward_list,

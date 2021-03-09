@@ -42,12 +42,12 @@ class FolsomEnv():
 	Accepts image data as input, daily time step.
 	"""
 	# metadata = {'render.modes': ['console']} # for rendering observations/data as print output, image, video, etc.
-	reward_range = (-float('inf'), float('inf'))
+	# reward_range = (-float('inf'), float('inf')) # not used 
 	# constants
 	cfs_to_taf = 2.29568411 * 10**-5 * 86400 / 1000
 	taf_to_cfs = 1000 / 86400 * 43560
 
-	def __init__(self, obs_dim = None, res_dim = None, forecast = False, stack = 0, inflow_stack = 0): 
+	def __init__(self, obs_dim = None, res_dim = None, forecast = False, stack = 0, inflow_stack = 0, epi_length = 1000): 
 		super(FolsomEnv,self).__init__()
 
 		self.forecast = forecast
@@ -57,6 +57,7 @@ class FolsomEnv():
 		self.inflow_stack = inflow_stack
 		self.cfs_to_taf = 2.29568411 * 10**-5 * 86400 / 1000
 		self.taf_to_cfs = 1000 / 86400 * 43560
+		self.epi_length = epi_length
 
 		# initialize reservoir model
 		self.K = 975  # capacity, TAF
@@ -69,10 +70,10 @@ class FolsomEnv():
 
 		# Define action and observation space
 		# They must be gym.spaces objects
-		self.action_space = spaces.Box(low=0, high=self.max_safe_release*self.cfs_to_taf,shape=(1,),dtype=float)
+		self.action_space = spaces.Box(low=-5, high=5, shape=(1,),dtype=float) # instead of self.max_safe_release*self.cfs_to_taf
 		# Example for using image as input:
-		self.reservoir_space = spaces.Box(low=np.array([0., 0.,]+[0. for i in np.arange(self.inflow_stack)]), 
-			high=np.array([self.K,365]+[self.Q_max for i in np.arange(self.inflow_stack)]),shape=self.res_dim,dtype=np.float32)		
+		self.reservoir_space = spaces.Box(low=np.array([0., 0.,]), 
+			high=np.array([self.K,365]),shape=self.res_dim,dtype=np.float32)		
 		if self.obs_dim is not None:
 			self.observation_space = spaces.Box(low=0, high=255,shape=self.obs_dim,dtype=np.uint8)
 		else:
@@ -101,7 +102,7 @@ class FolsomEnv():
 
 		# reinit. reservoir model
 		self.runup_days = max(self.stack,self.inflow_stack)
-		self.t = self.runup_days
+		self.t = 0 # self.runup_days # reset to beginning of episode
 		self.doy = (self.t+1) % 365
 		self.dowy = self.dowy_vect[self.doy-1]
 		self.S, self.R, self.target, self.shortage_cost, self.overage_cost, self.flood_cost = [np.zeros(self.T) for _ in range(6)]
@@ -125,7 +126,7 @@ class FolsomEnv():
 				print('Observation : ',self.observation_space.shape)
 				if self.forecast:
 					print('Forecast: (add description later)')
-			self.observation = np.array([self.S[self.t],float(self.doy),]+[self.Q[self.t-i] for i in np.arange(0,self.inflow_stack)])
+			self.observation = np.array([self.S[self.t],float(self.doy),])
 
 		return self.observation
 
@@ -138,7 +139,7 @@ class FolsomEnv():
 		# 	self.target[self.t] = max(0.2 * (self.Q[self.t] + self.S[self.t - 1] - tocs(self.dowy[self.t])), self.target[self.t])
 		# else:
 		# self.target[self.t] = max(self.D[self.t],self.action)
-		self.target[self.t] = self.action
+		self.target[self.t] = self.D[self.t] + self.action
 		self.R[self.t] = min(self.target[self.t], self.S[self.t - 1] + self.Q[self.t-1])
 		self.R[self.t] = min(self.R[self.t], max_release(self.S[self.t - 1]))
 		# self.R[self.t] = max(self.action,0)
@@ -160,10 +161,10 @@ class FolsomEnv():
 		if self.obs_dim is not None:
 			self.observation = self.data[(self.t-self.stack):self.t,:,:,:]
 		else:
-			self.observation = np.array([self.S[self.t],float(self.doy),]+[self.Q[self.t-i] for i in np.arange(0,self.inflow_stack)])
+			self.observation = np.array([self.S[self.t],float(self.doy),])
 
 		self.info = {'epi_done':False,'ens_done':False}
-		if self.t % 5000 == 0:
+		if self.t % self.epi_length == 0:
 			self.info['epi_done'] = True	
 		if self.t == self.T - 1:			
 			self.info['ens_done'], self.info['epi_done'] = True, True
