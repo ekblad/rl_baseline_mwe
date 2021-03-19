@@ -118,10 +118,10 @@ class Planner:
 		# state input - climate images
 		# state_input = layers.Input(shape=env.observation_space.shape)
 		# state_out = layers.experimental.preprocessing.Rescaling(1./255)(state_input)
-		# state_out = layers.Conv3D(8,5,padding='same',activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(state_out)
-		# state_out = layers.Conv3D(8,4,padding='same',activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(state_out)
+		# state_out = layers.Conv3D(8,5,padding='same',activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(state_out)
+		# state_out = layers.Conv3D(8,4,padding='same',activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(state_out)
 		# state_out = layers.AveragePooling3D()(state_out)
-		# state_out = layers.Conv3D(8,3,padding='same',activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(state_out)
+		# state_out = layers.Conv3D(8,3,padding='same',activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(state_out)
 		# state_out = layers.AveragePooling3D()(state_out)
 		# state_out = layers.Flatten()(state_out)
 
@@ -137,9 +137,9 @@ class Planner:
 			res_input = layers.Input(shape=env.reservoir_space.shape)
 			res_out = layers.experimental.preprocessing.Rescaling(scale=[1./env.K,1./365])(res_input)
 
-		res_out = layers.Dense(32,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)	
+		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)	
 		res_out = tf.keras.layers.BatchNormalization()(res_out)	
-		res_out = layers.Dense(32,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)
+		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)
 		res_out = tf.keras.layers.BatchNormalization()(res_out)
 
 		# action input
@@ -148,9 +148,9 @@ class Planner:
 
 		concat = layers.Concatenate()([act_out, res_out])
 
-		out = layers.Dense(64,activation="relu",kernel_initializer=initializer,kernel_regularizer='l2')(concat)
+		out = layers.Dense(64,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(concat)
 		out = tf.keras.layers.BatchNormalization()(out)
-		out = layers.Dense(64,activation="relu",kernel_initializer=initializer,kernel_regularizer='l2')(out)
+		out = layers.Dense(64,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(out)
 		out = tf.keras.layers.BatchNormalization()(out)
 		out = layers.Dense(1,activation="tanh",kernel_initializer=last_init,kernel_regularizer='l2')(out)
 
