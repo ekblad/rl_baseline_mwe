@@ -43,7 +43,7 @@ class Buffer:
 	Hence we update the Actor network so that it produces actions that get
 	the maximum predicted value as seen by the Critic, for a given state.
 	"""		
-	def __init__(self,actor_optimizer,critic_optimizer,num_states,num_res_states,
+	def __init__(self,num_states,num_res_states,actor_optimizer=None,critic_optimizer=None,
 				num_actions=1,buffer_capacity=100000,batch_size=64,gamma=0.99):
 		# store optimizers
 		self.actor_optimizer = actor_optimizer
@@ -83,27 +83,27 @@ class Buffer:
 	# TensorFlow to build a static graph out of the logic and computations in our function.
 	# This provides a large speed up for blocks of code that contain many small TensorFlow operations such as this one.
 	@tf.function
-	def update(self, res_state_batch,action_batch,reward_batch,next_res_state_batch,target_actor,target_critic,actor_model,critic_model):
+	def update(self, res_state_batch,action_batch,reward_batch,next_res_state_batch,agent):
 		# training and updating Actor & Critic networks. - see pseudocode.
 		with tf.GradientTape() as tape:
-			target_actions = target_actor(next_res_state_batch, training=True)
-			y = reward_batch + self.gamma * target_critic([next_res_state_batch, target_actions], training=True)
-			critic_value = critic_model([res_state_batch, action_batch], training=True)
+			target_actions = agent.target_actor(next_res_state_batch, training=True)
+			y = reward_batch + self.gamma * agent.target_critic([next_res_state_batch, target_actions], training=True)
+			critic_value = agent.critic([res_state_batch, action_batch], training=True)
 			critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value)) 
 			# error between target_critic on next state and critic_model on current state
-		critic_grad = tape.gradient(critic_loss, critic_model.trainable_variables)
-		self.critic_optimizer.apply_gradients(zip(critic_grad, critic_model.trainable_variables))
+		critic_grad = tape.gradient(critic_loss, agent.critic.trainable_variables)
+		self.critic_optimizer.apply_gradients(zip(critic_grad, agent.critic.trainable_variables))
 
 		with tf.GradientTape() as tape:
-			actions = actor_model(res_state_batch, training=True)
-			critic_value = critic_model([res_state_batch, actions], training=True)
+			actions = agent.actor(res_state_batch, training=True)
+			critic_value = agent.critic([res_state_batch, actions], training=True)
 			# used `-value` as we want to maximize the value given by the critic for our actions
 			actor_loss = -tf.math.reduce_mean(critic_value) # critic prediction is actor loss
-		actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
-		self.actor_optimizer.apply_gradients(zip(actor_grad, actor_model.trainable_variables))
+		actor_grad = tape.gradient(actor_loss, agent.actor.trainable_variables)
+		self.actor_optimizer.apply_gradients(zip(actor_grad, agent.actor.trainable_variables))
 
 	# compute the loss and update parameters
-	def learn(self,target_actor,target_critic,actor_model,critic_model):
+	def learn(self,agent):
 		# get sampling range
 		record_range = min(self.buffer_counter, self.buffer_capacity)
 		# randomly sample indices
@@ -118,8 +118,7 @@ class Buffer:
 		# next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
 		next_res_state_batch = tf.convert_to_tensor(self.next_res_state_buffer[batch_indices])
 
-		self.update(res_state_batch, action_batch, reward_batch, next_res_state_batch,target_actor,target_critic,actor_model,critic_model)
-		return target_actor,target_critic,actor_model,critic_model
+		self.update(res_state_batch, action_batch, reward_batch, next_res_state_batch,agent)
 
 
 # this update target parameters slowly based on rate `tau`, which is much less than one.

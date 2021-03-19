@@ -112,19 +112,19 @@ def main():
 				state, reward, info = env.step(action)
 				res_state = state
 				ens_done, epi_done = info['ens_done'], info['epi_done']
-				if env.t % 10 == 0:
-					print('|| Ep: {} ||'.format('{:1.0f}'.format(epi_count)),
-						't: {} ||'.format('{:5.0f}'.format(env.t)),
-						'dowy: {} ||'.format('{:3.0f}'.format(env.dowy)),
-						'R: {} ||'.format('{:7.0f}'.format(reward)),
-						'Ep. R: {} ||'.format('{:8.0f}'.format(episodic_reward)),
-						'Avg. R: {} ||'.format('{:4.0f}'.format(average_reward)),
-						'S: {} ||'.format('{:3.0f}'.format(env.S[env.t])),
-						'A: {} ||'.format('{:3.0f}'.format(env.action)), 
-						'Avg. A: {} ||'.format('{:3.0f}'.format(average_action)),	
-						'I: {} ||'.format('{:3.0f}'.format(env.Q[env.t])),							
-						'O: {} ||'.format('{:3.0f}'.format(env.R[env.t])),
-						)
+				# if env.t % 10 == 0:
+					# print('|| Ep: {} ||'.format('{:1.0f}'.format(epi_count)),
+					# 	't: {} ||'.format('{:5.0f}'.format(env.t)),
+					# 	'dowy: {} ||'.format('{:3.0f}'.format(env.dowy)),
+					# 	'R: {} ||'.format('{:7.0f}'.format(reward)),
+					# 	'Ep. R: {} ||'.format('{:8.0f}'.format(episodic_reward)),
+					# 	'Avg. R: {} ||'.format('{:4.0f}'.format(average_reward)),
+					# 	'S: {} ||'.format('{:3.0f}'.format(env.S[env.t])),
+					# 	'A: {} ||'.format('{:3.0f}'.format(env.action)), 
+					# 	'Avg. A: {} ||'.format('{:3.0f}'.format(average_action)),	
+					# 	'I: {} ||'.format('{:3.0f}'.format(env.Q[env.t])),							
+					# 	'O: {} ||'.format('{:3.0f}'.format(env.R[env.t])),
+					# 	)
 				buffer.record((prev_state, prev_res_state, action, reward, state, res_state))
 				episodic_reward += reward
 				average_reward = average_reward+(reward-average_reward)/env.t
