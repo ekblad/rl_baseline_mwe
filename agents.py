@@ -45,8 +45,10 @@ class Planner:
 	"""
 	This agent has access to information about the future at different time scales, so it can plan releases around expected inflows.
 	"""		
-	def __init__(self, env, weights_dir = None, max_epi = 100):
+	def __init__(self, env, weights_dir = None, max_epi = 100, eps = None):
 		self.env = env
+		self.eps = eps
+		self.env.eps = self.eps
 		# self.env.Q_df = self.env.Q_df
 		self.flows_format()
 		self.Q_num_inputs = len(self.env.Q_future.columns)
@@ -56,8 +58,8 @@ class Planner:
 		self.reset()
 
 	@staticmethod
-	def create(env, weights_dir = None, max_epi = 100):
-		obj = Planner(env, weights_dir = weights_dir, max_epi = max_epi)
+	def create(env, weights_dir = None, max_epi = 100, eps = None):
+		obj = Planner(env, weights_dir = weights_dir, max_epi = max_epi, eps = eps)
 		return obj, obj.env
 
 	def flows_format(self):
@@ -74,7 +76,7 @@ class Planner:
 	def get_actor(self,env):
 
 		# initializers:
-		initializer = tf.random_uniform_initializer(minval=-0.3, maxval=0.3)
+		initializer = tf.random_uniform_initializer(minval=-0.03, maxval=0.03)
 		last_init = tf.random_uniform_initializer(minval=-0.03, maxval=0.03)
 
 		# state_input = layers.Input(shape=env.observation_space.shape)
@@ -112,7 +114,7 @@ class Planner:
 
 	def get_critic(self,env):
 
-		initializer = tf.random_uniform_initializer(minval=-0.3, maxval=0.3)
+		initializer = tf.random_uniform_initializer(minval=-0.03, maxval=0.03)
 		last_init = tf.random_uniform_initializer(minval=-0.03, maxval=0.03)
 
 		# state input - climate images
@@ -159,7 +161,7 @@ class Planner:
 
 		return model
 
-	def policy(self, res_state, noise_object, actor_model, env, epi_count):
+	def policy(self, res_state, noise_object, actor_model, env):
 		upper_bound = env.action_space.high[0]
 		lower_bound = env.action_space.low[0]
 		"""
@@ -169,17 +171,28 @@ class Planner:
 		sampled_actions = tf.squeeze(actor_model(res_state))
 		draw = np.random.uniform(0,1)
 		# time = env.t/env.T
-		if draw > epi_count/self.max_epi:
-			noise = noise_object()
-			# if sampled_actions.numpy() < 0.5*env.action_space.high[0]:
-			sampled_actions = sampled_actions.numpy() + noise				
-			# sampled_actions = sampled_actions.numpy() + np.random.uniform(-0.1*env.action_space.high[0],0.1*env.action_space.high[0])
-			# else:
-				# sampled_actions = sampled_actions.numpy() - np.random.uniform(0,0.5*env.action_space.high[0])
-		else:
-			noise = 0.
-			sampled_actions = sampled_actions.numpy()		
-
+		if self.eps is None:
+			if draw > env.epi_count/self.max_epi:
+				noise = noise_object()
+				# if sampled_actions.numpy() < 0.5*env.action_space.high[0]:
+				sampled_actions = sampled_actions.numpy() + noise				
+				# sampled_actions = sampled_actions.numpy() + np.random.uniform(-0.1*env.action_space.high[0],0.1*env.action_space.high[0])
+				# else:
+					# sampled_actions = sampled_actions.numpy() - np.random.uniform(0,0.5*env.action_space.high[0])
+			else:
+				noise = 0.
+				sampled_actions = sampled_actions.numpy()
+		else:	
+			if draw < self.eps:
+				noise = noise_object()
+				# if sampled_actions.numpy() < 0.5*env.action_space.high[0]:
+				sampled_actions = sampled_actions.numpy() + noise				
+				# sampled_actions = sampled_actions.numpy() + np.random.uniform(-0.1*env.action_space.high[0],0.1*env.action_space.high[0])
+				# else:
+					# sampled_actions = sampled_actions.numpy() - np.random.uniform(0,0.5*env.action_space.high[0])
+			else:
+				noise = 0.
+				sampled_actions = sampled_actions.numpy()
 		# We make sure action is within bounds
 		legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
 
@@ -191,14 +204,25 @@ class Planner:
 		self.target_actor = self.get_actor(self.env)
 		self.target_critic = self.get_critic(self.env)
 		if self.weights_dir is not None:
+			self.WEIGHTS_DIR = self.weights_dir / 'weights'
 			# loading most recent saved weights
-			self.actor.load_weights(sorted(weights_dir.glob('actor*.h5')[-1]))
-			self.critic.load_weights(sorted(weights_dir.glob('critic*.h5')[-1]))
-			self.target_actor.load_weights(sorted(weights_dir.glob('target_actor*.h5')[-1]))
-			self.target_critic.load_weights(sorted(weights_dir.glob('target_critic*.h5')[-1]))	
+			# print(str(list(self.weights_dir.glob('actor*100ep.h5'))[0]))
+			self.actor.load_weights(list(self.WEIGHTS_DIR.glob('actor*100ep.h5'))[0])
+			self.critic.load_weights(list(self.WEIGHTS_DIR.glob('critic*100ep.h5'))[0])
+			self.target_actor.load_weights(list(self.WEIGHTS_DIR.glob('target_actor*100ep.h5'))[0])
+			self.target_critic.load_weights(list(self.WEIGHTS_DIR.glob('target_critic*100ep.h5'))[0])
 		else:
 			# making the weights equal initially:
 			self.target_actor.set_weights(self.actor.get_weights())
 			self.target_critic.set_weights(self.critic.get_weights())
+
+	def save_weights(self, epi_count, STOR_DIR):
+		self.WEIGHTS_DIR = STOR_DIR / 'weights'
+		if not self.WEIGHTS_DIR.exists():
+			self.WEIGHTS_DIR.mkdir(exist_ok=True)
+		self.actor.save_weights(self.WEIGHTS_DIR / f"actor_{epi_count:05}.h5")
+		self.critic.save_weights(self.WEIGHTS_DIR / f"critic_{epi_count:05}.h5")
+		self.target_actor.save_weights(self.WEIGHTS_DIR / f"target_actor_{epi_count:05}.h5")
+		self.target_critic.save_weights(self.WEIGHTS_DIR / f"target_critic_{epi_count:05}.h5")
 
 

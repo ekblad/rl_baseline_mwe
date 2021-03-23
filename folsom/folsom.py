@@ -5,6 +5,8 @@ import pandas as pd
 import xarray as xr
 from numba import jit
 from gym import spaces
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # based on example at: https://github.com/jdherman/ptreeopt/blob/master/examples/folsom/folsom.py
 
@@ -47,7 +49,7 @@ class FolsomEnv():
 	cfs_to_taf = 2.29568411 * 10**-5 * 86400 / 1000
 	taf_to_cfs = 1000 / 86400 * 43560
 
-	def __init__(self, DATA_DIR, obs_dim = None, res_dim = None, forecast = False, stack = 0, inflow_stack = 0, epi_length = 1000, ens='r1i1p1',): 
+	def __init__(self, DATA_DIR, obs_dim = None, res_dim = None, forecast = False, stack = 0, inflow_stack = 0, epi_count = 0, epi_length = 1000, ens='r1i1p1',): 
 		super(FolsomEnv,self).__init__()
 		
 		self.DATA_DIR = DATA_DIR
@@ -59,6 +61,7 @@ class FolsomEnv():
 		self.inflow_stack = inflow_stack
 		self.cfs_to_taf = 2.29568411 * 10**-5 * 86400 / 1000
 		self.taf_to_cfs = 1000 / 86400 * 43560
+		self.epi_count = 0
 		self.epi_length = epi_length
 
 		# initialize reservoir model
@@ -84,7 +87,7 @@ class FolsomEnv():
 		else:
 			self.observation_space = self.reservoir_space
 
-	def reset(self, agent_type='planner', model='canesm2', ens='r1i1p1', epi_count=0, epi_start=0):
+	def reset(self, agent_type='planner', model='canesm2', ens='r1i1p1', epi_start=0):
 		"""
 		Important: the observation must be a numpy array
 		:return: (np.array) 
@@ -93,8 +96,6 @@ class FolsomEnv():
 		self.agent_type = agent_type
 		self.ens = ens
 		self.model = model
-
-		self.epi_count = epi_count
 		self.t_start = epi_start
 		self.MODEL_DIR = self.DATA_DIR / self.model
 		# read in inflows:
@@ -104,7 +105,8 @@ class FolsomEnv():
 		self.Q = self.Q_df['inflow'].values
 		self.time_vector = self.Q_df.index.values
 		self.dowy_vect = np.array([water_day(d) for d in self.Q_df.index.dayofyear])
-		self.D = np.loadtxt(self.FLOWS_DIR / 'demand.txt')[self.dowy_vect] # in memory
+		self.D_shift = np.loadtxt(self.FLOWS_DIR / 'demand.txt')
+		self.D = self.D_shift[self.dowy_vect]
 		self.T = len(self.Q_df.index)
 
 		# reinit. reservoir model
@@ -112,7 +114,7 @@ class FolsomEnv():
 		self.t = self.t_start # self.runup_days # reset to beginning of episode
 		self.doy = (self.t+1) % 365
 		self.dowy = self.dowy_vect[self.doy-1]
-		self.S, self.R, self.target, self.shortage_cost, self.flood_cost, self.noise, self.rewards = [np.zeros(self.T) for _ in range(7)]
+		self.S, self.R, self.target, self.shortage_cost, self.flood_cost, self.storage_cost, self.noise, self.rewards = [np.zeros(self.T) for _ in range(8)]
 		self.R[self.t] = self.D[self.t]
 		self.S[self.t] = 500.
 		self.start_date = self.time_vector[self.t]
@@ -161,31 +163,105 @@ class FolsomEnv():
 		self.S[self.t] = self.S[self.t - 1] + self.Q[self.t] - self.R[self.t]
 
 		# squared deficit. Also penalize any total release over 100 TAF/day
-		self.shortage_cost[self.t] = max(self.D[self.t] - self.R[self.t], 0)**2
+		self.shortage_cost[self.t] += max(self.D[self.t] - self.R[self.t], 0)**2
 		if self.R[self.t] > self.cfs_to_taf * self.max_safe_release:
 			# flood penalty, high enough to be a constraint
 			self.flood_cost[self.t] += 10**3 * (self.R[self.t] - self.cfs_to_taf * self.max_safe_release)
-		self.reward = -(self.shortage_cost[self.t] + self.flood_cost[self.t])
+		self.storage_cost[self.t] += max(200-self.S[self.t],0)
+		self.reward = -(self.shortage_cost[self.t] + self.flood_cost[self.t] + self.storage_cost[self.t])
 		if self.agent_type == 'planner':
 			self.observation = np.array([self.S[self.t],float(self.doy),]+list(self.Q_future_numpy[self.t,:]))
 		elif self.agent_type == 'baseline' or self.agent_type == 'spatial_climate':
 			self.observation = np.array([self.S[self.t],float(self.doy),])				
 		# elif self.agent_type == 'scalar_climate':
-
 		self.info = {'epi_done':False,'ens_done':False}
 		if self.t-self.t_start == self.epi_length:
-			if self.S[self.t] < 0.8*self.K:
-				self.reward += -(0.8*self.K-self.S[self.t])**2
 			self.info['epi_done'] = True
 		if self.t == self.T - 1:
 			self.info['ens_done'], self.info['epi_done'] = True, True
 		self.rewards[self.t] = self.reward
 		return self.observation, self.reward, self.info
 
-	def render(self, mode='console'):
-		if mode != 'console':
-			raise NotImplementedError()
-		# print some representation of the current env, ie. incurred penalties, objectives, reservoir levels, etc.
+	def render(self, STOR_DIR = None, mode = ['figures']):
+		# if mode != 'console':
+		# 	raise NotImplementedError()
+		if 'console' in mode:
+			print('|| Ep: {} ||'.format('{:1.0f}'.format(self.epi_count)),
+					't: {} ||'.format('{:5.0f}'.format(self.t)),
+					'dowy: {} ||'.format('{:3.0f}'.format(self.dowy)),
+					'R: {} ||'.format('{:7.0f}'.format(self.rewards[self.t])),
+					'Ep. R: {} ||'.format('{:9.0f}'.format(np.sum(self.rewards[self.t_start:self.t]))),
+					'Avg. R: {} ||'.format('{:4.0f}'.format(np.mean(self.rewards[self.t_start:self.t]))),
+					'S: {} ||'.format('{:3.0f}'.format(self.S[self.t])),
+					'A: {} ||'.format('{:3.0f}'.format(self.target[self.t])), 
+					'Avg. A: {} ||'.format('{:3.1f}'.format(np.mean(self.target[self.t_start:self.t]))),	
+					'I: {} ||'.format('{:3.0f}'.format(self.Q[self.t])),							
+					'O: {} ||'.format('{:3.0f}'.format(self.R[self.t])),
+					)
+		if 'figures' in mode:
+			# store most recent episode simulation results:
+			epi_sim = {'time':self.Q_df.index[self.t_start:self.t],
+						'inflow':self.Q_df['inflow'].iloc[self.t_start:self.t],
+						'storage':self.S[self.t_start:self.t],
+						'target':self.target[self.t_start:self.t],
+						'noise':self.noise[self.t_start:self.t],
+						'release':self.R[self.t_start:self.t],
+						'shortage_cost':self.shortage_cost[self.t_start:self.t],
+						'flood_cost':self.flood_cost[self.t_start:self.t],
+						'storage_cost':self.storage_cost[self.t_start:self.t],
+						'reward':self.rewards[self.t_start:self.t],}
+			epi_sim = pd.DataFrame.from_dict(epi_sim,orient='columns')
+			epi_sim.set_index('time')			
+			epi_sim.to_csv(STOR_DIR / f'results_sim_{self.epi_count:05}.csv')
+			axes = epi_sim.plot(subplots=True,figsize=(8,12))
+			axes[0].set_title('Planner Simulation - Episode {}'.format(self.epi_count))
+			for ax in axes.flatten():
+				ax.legend(frameon=False)
+			plt.tight_layout()
+			plt.savefig(STOR_DIR / f'results_sim_{self.epi_count:05}.png',dpi=400)
+			plt.close('all')
+
+			avg_df = {'Episodic Rewards': self.epi_reward_list,
+						'Average Rewards': self.avg_reward_list,
+						'Average Actions': self.avg_action_list,}
+			avg_df = pd.DataFrame.from_dict(avg_df)
+			avg_df.to_csv(STOR_DIR / 'results_averages.csv')
+
+			axes = avg_df.plot(subplots=True,figsize=(8,6))
+			axes[0].set_title('Average and Episodic Results')
+			axes[0].set_ylabel('Tot. Cost')
+			axes[1].set_ylabel('Avg. Cost')
+			axes[2].set_ylabel('Release [TAF]')
+			axes[2].set_xlabel('Episode')
+			for ax in axes.flatten():
+				ax.legend(frameon=False)
+			plt.tight_layout()
+			plt.savefig(STOR_DIR / 'results_averages.png', dpi=400)
+			plt.close('all')
+
+			fig,axes = plt.subplots(figsize=(7,5))
+			axes.plot(range(1,self.epi_count+1),self.epi_reward_list,label='Episodic Reward',c = 'Blue')
+			axes.axhline(-5783*40,label='40-yr Zero-Release Penalty',c='Red')
+			axes.set_xlabel('Episode')
+			axes.set_ylabel('Penalty')
+			axes.set_title('Actor-Critic Convergence')
+			plt.legend(frameon=False,loc='lower right', bbox_to_anchor=(1.,0.05))
+			plt.tight_layout()
+			plt.savefig(STOR_DIR / 'results_ep_reward.png', dpi=400)
+			plt.close('all')
+
+			epi_sim['day of year'] = [i.dayofyear for i in epi_sim.index]
+			epi_sim['day of water year'] = water_day(epi_sim['day of year'].values)
+			fig, axes = plt.subplots(4,1,figsize=(10, 10))
+			axes[0].scatter(range(1,366),self.D_shift[:-1])
+			axes[0].set_ylabel('daily demand (taf)')
+			sns.kdeplot(ax=axes[1],x='day of water year',y='storage',fill=True,cut=0,thresh=0.1,levels=100,cmap="mako",data=epi_sim)
+			sns.kdeplot(ax=axes[2],x='day of water year',y='target',fill=True,cut=0,thresh=0.1,levels=100,cmap="mako",data=epi_sim)
+			sns.kdeplot(ax=axes[3],x='day of water year',y='release',fill=True,cut=0,thresh=0.1,levels=100,cmap="mako",data=epi_sim)
+			fig.suptitle('seasonal results')
+			plt.tight_layout()
+			plt.savefig(STOR_DIR / f'results_seasonal_{self.epi_count:05}.png', dpi=400)
+			plt.close('all')
 		
 	def seed(self,seed):
 		self.seed = seed # not implemented or needed
