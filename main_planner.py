@@ -105,7 +105,7 @@ def main():
 			prev_state = state
 			prev_res_state = res_state
 		warmup = False
-		if warmups < buffer_capacity % epi_steps:
+		if warmups < buffer_capacity / epi_steps:
 			warmups += 1			
 			epi_done = False
 			warmup = True
