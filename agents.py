@@ -47,6 +47,8 @@ class Planner:
 	"""		
 	def __init__(self, env, weights_dir = None, max_epi = 100, eps = None):
 		self.env = env
+		self.upper_bound = env.action_space.high[0]
+		self.lower_bound = env.action_space.low[0]
 		self.eps = eps
 		self.env.eps = self.eps
 		# self.env.Q_df = self.env.Q_df
@@ -98,14 +100,14 @@ class Planner:
 		elif self.agent_type == 'baseline' or self.agent_type == 'spatial_climate':
 			res_input = layers.Input(shape=env.reservoir_space.shape)
 			res_out = layers.experimental.preprocessing.Rescaling(scale=[1./env.K,1./365])(res_input)
-		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer)(res_out)		
+		res_out = layers.Dense(128,activation='selu',kernel_initializer=initializer)(res_out)		
 		res_out = tf.keras.layers.BatchNormalization()(res_out)
-		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer)(res_out)
+		res_out = layers.Dense(128,activation='selu',kernel_initializer=initializer)(res_out)
 		res_out = tf.keras.layers.BatchNormalization()(res_out)
 
-		out = layers.Dense(64,activation='selu',kernel_initializer=initializer)(res_out)
+		out = layers.Dense(256,activation='selu',kernel_initializer=initializer)(res_out)
 		out = tf.keras.layers.BatchNormalization()(out)
-		out = layers.Dense(64,activation='selu',kernel_initializer=initializer)(out)
+		out = layers.Dense(256,activation='selu',kernel_initializer=initializer)(out)
 		out = tf.keras.layers.BatchNormalization()(out)
 		out = layers.Dense(1,activation='sigmoid',kernel_initializer=last_init)(out)
 		out = env.action_space.low[0] + out*(env.action_space.high[0] - env.action_space.low[0])
@@ -139,9 +141,9 @@ class Planner:
 			res_input = layers.Input(shape=env.reservoir_space.shape)
 			res_out = layers.experimental.preprocessing.Rescaling(scale=[1./env.K,1./365])(res_input)
 
-		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)	
+		res_out = layers.Dense(128,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)	
 		res_out = tf.keras.layers.BatchNormalization()(res_out)	
-		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)
+		res_out = layers.Dense(128,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)
 		res_out = tf.keras.layers.BatchNormalization()(res_out)
 
 		# action input
@@ -150,9 +152,9 @@ class Planner:
 
 		concat = layers.Concatenate()([act_out, res_out])
 
-		out = layers.Dense(64,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(concat)
+		out = layers.Dense(256,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(concat)
 		out = tf.keras.layers.BatchNormalization()(out)
-		out = layers.Dense(64,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(out)
+		out = layers.Dense(256,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(out)
 		out = tf.keras.layers.BatchNormalization()(out)
 		out = layers.Dense(1,activation="tanh",kernel_initializer=last_init,kernel_regularizer='l2')(out)
 
@@ -161,60 +163,52 @@ class Planner:
 
 		return model
 
-	def policy(self, res_state, noise_object, actor_model, env):
-		upper_bound = env.action_space.high[0]
-		lower_bound = env.action_space.low[0]
+	def policy(self, res_state, noise_object, actor_model, epi_count):
 		"""
 		`policy()` returns an action sampled from our Actor network plus some noise for
 		exploration.
 		"""
 		sampled_actions = tf.squeeze(actor_model(res_state))
 		draw = np.random.uniform(0,1)
-		# time = env.t/env.T
 		if self.eps is None:
-			if draw > env.epi_count/self.max_epi:
+			if draw > epi_count/self.max_epi:
 				noise = noise_object()
-				# if sampled_actions.numpy() < 0.5*env.action_space.high[0]:
-				sampled_actions = sampled_actions.numpy() + noise				
-				# sampled_actions = sampled_actions.numpy() + np.random.uniform(-0.1*env.action_space.high[0],0.1*env.action_space.high[0])
-				# else:
-					# sampled_actions = sampled_actions.numpy() - np.random.uniform(0,0.5*env.action_space.high[0])
+				sampled_actions = sampled_actions.numpy() + noise
 			else:
 				noise = 0.
 				sampled_actions = sampled_actions.numpy()
 		else:	
 			if draw < self.eps:
 				noise = noise_object()
-				# if sampled_actions.numpy() < 0.5*env.action_space.high[0]:
-				sampled_actions = sampled_actions.numpy() + noise				
-				# sampled_actions = sampled_actions.numpy() + np.random.uniform(-0.1*env.action_space.high[0],0.1*env.action_space.high[0])
-				# else:
-					# sampled_actions = sampled_actions.numpy() - np.random.uniform(0,0.5*env.action_space.high[0])
+				sampled_actions = sampled_actions.numpy() + noise
 			else:
 				noise = 0.
 				sampled_actions = sampled_actions.numpy()
-		# We make sure action is within bounds
-		legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
-
+		# make sure action is within bounds
+		legal_action = np.clip(sampled_actions, self.lower_bound, self.upper_bound)
 		return [np.squeeze(legal_action)], noise
 
 	def reset(self):
 		self.actor = self.get_actor(self.env)
 		self.critic = self.get_critic(self.env)
+		self.critic2 = self.get_critic(self.env)
 		self.target_actor = self.get_actor(self.env)
 		self.target_critic = self.get_critic(self.env)
+		self.target_critic2 = self.get_critic(self.env)
 		if self.weights_dir is not None:
 			self.WEIGHTS_DIR = self.weights_dir / 'weights'
 			# loading most recent saved weights
-			# print(str(list(self.weights_dir.glob('actor*100ep.h5'))[0]))
-			self.actor.load_weights(list(self.WEIGHTS_DIR.glob('actor*100ep.h5'))[0])
-			self.critic.load_weights(list(self.WEIGHTS_DIR.glob('critic*100ep.h5'))[0])
-			self.target_actor.load_weights(list(self.WEIGHTS_DIR.glob('target_actor*100ep.h5'))[0])
-			self.target_critic.load_weights(list(self.WEIGHTS_DIR.glob('target_critic*100ep.h5'))[0])
+			self.actor.load_weights(sorted(self.WEIGHTS_DIR.glob('actor_*.h5'))[-1])
+			self.critic.load_weights(sorted(self.WEIGHTS_DIR.glob('critic_*.h5'))[-1])
+			self.critic2.load_weights(sorted(self.WEIGHTS_DIR.glob('critic2_*.h5'))[-1])
+			self.target_actor.load_weights(sorted(self.WEIGHTS_DIR.glob('target_actor_*.h5'))[-1])
+			self.target_critic.load_weights(sorted(self.WEIGHTS_DIR.glob('target_critic_*.h5'))[-1])
+			self.target_critic2.load_weights(sorted(self.WEIGHTS_DIR.glob('target_critic2_*.h5'))[-1])
 		else:
 			# making the weights equal initially:
 			self.target_actor.set_weights(self.actor.get_weights())
 			self.target_critic.set_weights(self.critic.get_weights())
+			self.target_critic2.set_weights(self.critic2.get_weights())
 
 	def save_weights(self, epi_count, STOR_DIR):
 		self.WEIGHTS_DIR = STOR_DIR / 'weights'
@@ -222,7 +216,9 @@ class Planner:
 			self.WEIGHTS_DIR.mkdir(exist_ok=True)
 		self.actor.save_weights(self.WEIGHTS_DIR / f"actor_{epi_count:05}.h5")
 		self.critic.save_weights(self.WEIGHTS_DIR / f"critic_{epi_count:05}.h5")
+		self.critic2.save_weights(self.WEIGHTS_DIR / f"critic2_{epi_count:05}.h5")
 		self.target_actor.save_weights(self.WEIGHTS_DIR / f"target_actor_{epi_count:05}.h5")
 		self.target_critic.save_weights(self.WEIGHTS_DIR / f"target_critic_{epi_count:05}.h5")
+		self.target_critic2.save_weights(self.WEIGHTS_DIR / f"target_critic2_{epi_count:05}.h5")
 
 

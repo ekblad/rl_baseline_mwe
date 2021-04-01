@@ -222,17 +222,20 @@ class FolsomEnv():
 			plt.close('all')
 
 			avg_df = {'Episodic Rewards': self.epi_reward_list,
+						'Avg. Episodic Rewards': self.epi_avg_reward_list,	
 						'Average Rewards': self.avg_reward_list,
-						'Average Actions': self.avg_action_list,}
+						'Average Actions': self.avg_action_list,
+						}
 			avg_df = pd.DataFrame.from_dict(avg_df)
 			avg_df.to_csv(STOR_DIR / 'results_averages.csv')
 
 			axes = avg_df.plot(subplots=True,figsize=(8,6))
 			axes[0].set_title('Average and Episodic Results')
 			axes[0].set_ylabel('Tot. Cost')
-			axes[1].set_ylabel('Avg. Cost')
-			axes[2].set_ylabel('Release [TAF]')
-			axes[2].set_xlabel('Episode')
+			axes[1].set_ylabel('Avg. Tot. Cost')			
+			axes[2].set_ylabel('Avg. Cost')
+			axes[3].set_ylabel('Release [TAF]')
+			axes[3].set_xlabel('Episode')
 			for ax in axes.flatten():
 				ax.legend(frameon=False)
 			plt.tight_layout()
@@ -240,7 +243,7 @@ class FolsomEnv():
 			plt.close('all')
 
 			fig,axes = plt.subplots(figsize=(7,5))
-			axes.plot(range(1,self.epi_count+1),self.epi_reward_list,label='Episodic Reward',c = 'Blue')
+			axes.plot(range(1,self.epi_count+1),self.epi_avg_reward_list,label='Avg. Reward (last 40 40-yr episodes)',c = 'Blue')
 			axes.axhline(-5783*40,label='40-yr Zero-Release Penalty',c='Red')
 			axes.set_xlabel('Episode')
 			axes.set_ylabel('Penalty')
