@@ -17,7 +17,7 @@ from agents import Planner
 def main():
 
 	DATA_DIR = Path.cwd()
-	STOR_DIR = DATA_DIR / 'results_planner_6'
+	STOR_DIR = DATA_DIR / 'results_planner_8'
 	STOR_DIR.mkdir(exist_ok=True)
 	# OLD_DIR = DATA_DIR / 'results_planner_5'
 	OLD_DIR = None
@@ -25,11 +25,11 @@ def main():
 	num_res_states = 2 # day-of-year and reservoir storage
 	inflow_stack = 15 # 15 future inflow features at various time scales between 1 day and 5 years
 	TD3 = True # use TD3 adjustments to DDPG from Fujimoto et al. (2018)	
-	warmup = True # use warmup period w/ random uniform action selection for one episode
+	warmup = True # use warmup period, fill buffer w/ random uniform action selection experiences
 	eps = 0.1 # if not None, use epsilon-greedy action exploration strategy
 	epi_start = 30 * 365 # day of ensemble member to start episode on
 	epi_steps = 40 * 365 # length of episode in days
-	max_epi = 100 # upper bound used to determine annealing schedule (if not epsilon-greedy)	
+	max_epi = 1000 # upper bound used to determine annealing schedule (if not epsilon-greedy)	
 	models = ['canesm2',]
 	ensembles = ['r1i1p1' for i in np.arange(0,10)]
 
@@ -59,11 +59,11 @@ def main():
 	agent.noise_object = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1)) 
 
 	# learning rate for actor-critic models:
-	actor_lr = 10e-7 # slowest learner
-	critic_lr = 10e-7 # should learn faster than actor
+	actor_lr = 10e-8 # slowest learner
+	critic_lr = 10e-8 # should learn faster than actor
 
 	# learning rate used to update target networks:
-	tau = 10e-3 # the target actor and critic networks slowly take the actor/critic weights
+	tau = 10e-2 # the target actor and critic networks slowly take the actor/critic weights
 
 	# initialize optimizers:
 	clipnorm = 0.1
@@ -77,7 +77,7 @@ def main():
 	# discount factor for future rewards
 	gamma = 0.99
 	batch_size = 100
-	buffer_capacity = 10*epi_steps
+	buffer_capacity = 100*epi_steps
 	agent.buffer = Buffer(env, agent, buffer_capacity, batch_size, gamma)
 
 	"""
@@ -97,9 +97,9 @@ def main():
 		print('Running data from ensemble member: {}'.format(ens))
 		average_reward, average_action, ens_done = 0, 0, False
 		while ens_done == False:
+			agent.epi_count += 1			
 			prev_state = env.reset(agent)
 			prev_res_state, episodic_reward, episodic_action, agent.epi_done = prev_state, 0, 0, False
-			agent.epi_count += 1
 			while agent.epi_done == False:
 				tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
 				action, noise = agent.policy(tf_prev_state)
@@ -136,7 +136,7 @@ def main():
 
 			if agent.epi_count % 5 == 0:
 				# save the weights every n episodes
-				agent.save_weights(agent.epi_count,STOR_DIR)
+				agent.save_weights(STOR_DIR)
 				env.render(agent=agent,STOR_DIR=STOR_DIR,mode=['console','figures'])
 
 			print("Episode * {} * Avg Reward is ==> {}".format(agent.epi_count, agent.epi_avg_reward_list[-1]))

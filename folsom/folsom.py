@@ -212,13 +212,13 @@ class Folsom():
 						'reward':self.rewards[self.t_start:self.t],}
 			epi_sim = pd.DataFrame.from_dict(epi_sim,orient='columns')
 			epi_sim.set_index('time')			
-			epi_sim.to_csv(STOR_DIR / f'results_sim_{self.epi_count:05}.csv')
+			epi_sim.to_csv(STOR_DIR / f'results_sim_{agent.epi_count:05}.csv')
 			axes = epi_sim.plot(subplots=True,figsize=(8,12))
 			axes[0].set_title('Planner Simulation - Episode {}'.format(self.epi_count))
 			for ax in axes.flatten():
 				ax.legend(frameon=False)
 			plt.tight_layout()
-			plt.savefig(STOR_DIR / f'results_sim_{self.epi_count:05}.png',dpi=400)
+			plt.savefig(STOR_DIR / f'results_sim_{agent.epi_count:05}.png',dpi=400)
 			plt.close('all')
 
 			avg_df = {'Episodic Rewards': agent.epi_reward_list,
@@ -243,7 +243,7 @@ class Folsom():
 			plt.close('all')
 
 			fig,axes = plt.subplots(figsize=(7,5))
-			axes.plot(range(0,self.epi_count+1),agent.epi_avg_reward_list,label='Avg. Reward (last 40 40-yr episodes)',c = 'Blue')
+			axes.plot(range(1,agent.epi_count),agent.epi_avg_reward_list,label='Avg. Reward (last 40 40-yr episodes)',c = 'Blue')
 			axes.axhline(-5783*40,label='40-yr Zero-Release Penalty',c='Red')
 			axes.set_xlabel('Episode')
 			axes.set_ylabel('Penalty')
@@ -263,7 +263,7 @@ class Folsom():
 			sns.kdeplot(ax=axes[3],x='day of water year',y='release',fill=True,cut=0,thresh=0.1,levels=100,cmap="mako",data=epi_sim)
 			fig.suptitle('seasonal results')
 			plt.tight_layout()
-			plt.savefig(STOR_DIR / f'results_seasonal_{self.epi_count:05}.png', dpi=400)
+			plt.savefig(STOR_DIR / f'results_seasonal_{agent.epi_count:05}.png', dpi=400)
 			plt.close('all')
 		
 	def seed(self,seed):

@@ -54,7 +54,7 @@ class Planner:
 		self.epi_start = epi_start
 		self.epi_steps = epi_steps
 		self.max_epi = max_epi
-		self.epi_count = 0	
+		self.epi_count = 1	
 		self.epi_reward_list = []
 		self.avg_reward_list = []
 		self.avg_action_list = []
@@ -111,14 +111,14 @@ class Planner:
 		elif self.agent_type == 'baseline' or self.agent_type == 'spatial_climate':
 			res_input = layers.Input(shape=env.reservoir_space.shape)
 			res_out = layers.experimental.preprocessing.Rescaling(scale=[1./env.K,1./365])(res_input)
-		res_out = layers.Dense(128,activation='selu',kernel_initializer=initializer)(res_out)		
+		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer)(res_out)		
 		res_out = tf.keras.layers.BatchNormalization()(res_out)
-		res_out = layers.Dense(128,activation='selu',kernel_initializer=initializer)(res_out)
+		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer)(res_out)
 		res_out = tf.keras.layers.BatchNormalization()(res_out)
 
-		out = layers.Dense(256,activation='selu',kernel_initializer=initializer)(res_out)
+		out = layers.Dense(64,activation='selu',kernel_initializer=initializer)(res_out)
 		out = tf.keras.layers.BatchNormalization()(out)
-		out = layers.Dense(256,activation='selu',kernel_initializer=initializer)(out)
+		out = layers.Dense(64,activation='selu',kernel_initializer=initializer)(out)
 		out = tf.keras.layers.BatchNormalization()(out)
 		out = layers.Dense(1,activation='sigmoid',kernel_initializer=last_init)(out)
 		out = env.action_space.low[0] + out*(env.action_space.high[0] - env.action_space.low[0])
@@ -152,9 +152,9 @@ class Planner:
 			res_input = layers.Input(shape=env.reservoir_space.shape)
 			res_out = layers.experimental.preprocessing.Rescaling(scale=[1./env.K,1./365])(res_input)
 
-		res_out = layers.Dense(128,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)	
+		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)	
 		res_out = tf.keras.layers.BatchNormalization()(res_out)	
-		res_out = layers.Dense(128,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)
+		res_out = layers.Dense(32,activation='selu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)
 		res_out = tf.keras.layers.BatchNormalization()(res_out)
 
 		# action input
@@ -163,9 +163,9 @@ class Planner:
 
 		concat = layers.Concatenate()([act_out, res_out])
 
-		out = layers.Dense(256,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(concat)
+		out = layers.Dense(64,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(concat)
 		out = tf.keras.layers.BatchNormalization()(out)
-		out = layers.Dense(256,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(out)
+		out = layers.Dense(64,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(out)
 		out = tf.keras.layers.BatchNormalization()(out)
 		out = layers.Dense(1,activation="tanh",kernel_initializer=last_init,kernel_regularizer='l2')(out)
 		# outputs single value for give state-action
@@ -188,7 +188,8 @@ class Planner:
 				sampled_actions = sampled_actions.numpy()
 		else:	
 			if draw < self.eps:
-				noise = self.noise_object()
+				# noise = self.noise_object()
+				noise = np.random.uniform(-5.,5.)
 				sampled_actions = sampled_actions.numpy() + noise
 			else:
 				noise = 0.
@@ -219,15 +220,15 @@ class Planner:
 			self.target_critic.set_weights(self.critic.get_weights())
 			self.target_critic2.set_weights(self.critic2.get_weights())
 
-	def save_weights(self, epi_count, STOR_DIR):
+	def save_weights(self, STOR_DIR):
 		self.WEIGHTS_DIR = STOR_DIR / 'weights'
 		if not self.WEIGHTS_DIR.exists():
 			self.WEIGHTS_DIR.mkdir(exist_ok=True)
-		self.actor.save_weights(self.WEIGHTS_DIR / f"actor_{epi_count:05}.h5")
-		self.critic.save_weights(self.WEIGHTS_DIR / f"critic_{epi_count:05}.h5")
-		self.critic2.save_weights(self.WEIGHTS_DIR / f"critic2_{epi_count:05}.h5")
-		self.target_actor.save_weights(self.WEIGHTS_DIR / f"target_actor_{epi_count:05}.h5")
-		self.target_critic.save_weights(self.WEIGHTS_DIR / f"target_critic_{epi_count:05}.h5")
-		self.target_critic2.save_weights(self.WEIGHTS_DIR / f"target_critic2_{epi_count:05}.h5")
+		self.actor.save_weights(self.WEIGHTS_DIR / f"actor_{self.epi_count:05}.h5")
+		self.critic.save_weights(self.WEIGHTS_DIR / f"critic_{self.epi_count:05}.h5")
+		self.critic2.save_weights(self.WEIGHTS_DIR / f"critic2_{self.epi_count:05}.h5")
+		self.target_actor.save_weights(self.WEIGHTS_DIR / f"target_actor_{self.epi_count:05}.h5")
+		self.target_critic.save_weights(self.WEIGHTS_DIR / f"target_critic_{self.epi_count:05}.h5")
+		self.target_critic2.save_weights(self.WEIGHTS_DIR / f"target_critic2_{self.epi_count:05}.h5")
 
 
