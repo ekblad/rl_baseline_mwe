@@ -43,13 +43,16 @@ class Buffer:
 	Hence we update the Actor network so that it produces actions that get
 	the maximum predicted value as seen by the Critic, for a given state.
 	"""		
-	def __init__(self,num_states,num_res_states,TD3=True,actor_optimizer=None,critic_optimizer=None,critic2_optimizer=None,
-				num_actions=1,buffer_capacity=100000,batch_size=64,gamma=0.99):
-		self.TD3 = TD3
+	def __init__(self, env, agent, buffer_capacity=100000, batch_size=64, gamma=0.99):
+		# self.TD3 = agent.TD3
 		# store optimizers
-		self.actor_optimizer = actor_optimizer
-		self.critic_optimizer = critic_optimizer
-		self.critic2_optimizer = critic2_optimizer
+		self.actor_optimizer = agent.actor_optimizer
+		self.critic_optimizer = agent.critic_optimizer
+		self.critic2_optimizer = agent.critic2_optimizer
+		self.TD3 = agent.TD3
+		self.num_states = env.observation_space.shape
+		self.num_actions = env.action_space.shape[0]
+		self.num_res_states = env.reservoir_space.shape
 		# number of "experiences" to store at max
 		self.buffer_capacity = buffer_capacity
 		# num of tuples to train on.
@@ -60,12 +63,12 @@ class Buffer:
 		self.buffer_counter = 0
 
 		# instead of list of tuples as the exp.replay concept go, we use different np.arrays for each tuple element
-		self.state_buffer = np.zeros((self.buffer_capacity,) + num_states)
-		self.res_state_buffer = np.zeros((self.buffer_capacity,)+ num_res_states)			
-		self.action_buffer = np.zeros((self.buffer_capacity, num_actions))
+		self.state_buffer = np.zeros((self.buffer_capacity,) + self.num_states)
+		self.res_state_buffer = np.zeros((self.buffer_capacity,)+ self.num_res_states)			
+		self.action_buffer = np.zeros((self.buffer_capacity, self.num_actions))
 		self.reward_buffer = np.zeros((self.buffer_capacity, 1))
-		self.next_state_buffer = np.zeros((self.buffer_capacity,)+ num_states)
-		self.next_res_state_buffer = np.zeros((self.buffer_capacity,)+ num_res_states)
+		self.next_state_buffer = np.zeros((self.buffer_capacity,)+ self.num_states)
+		self.next_res_state_buffer = np.zeros((self.buffer_capacity,)+ self.num_res_states)
 
 	# takes (s,a,r,s') obervation tuple as input
 	def record(self, obs_tuple):
@@ -192,6 +195,44 @@ class Buffer:
 		next_res_state_batch = tf.convert_to_tensor(self.next_res_state_buffer[batch_indices])
 
 		self.update(res_state_batch, action_batch, reward_batch, next_res_state_batch,agent)
+
+	def warmup(self,env,agent,OLD_DIR):
+		warmup, warmups, epi_done = True, 0, False
+		# if OLD_DIR is None:
+		while warmup:
+			prev_state = env.reset(agent)
+			prev_res_state = prev_state
+			while epi_done == False:
+				action, noise = [np.random.uniform(env.action_space.low[0],env.action_space.high[0]),], 0
+				state, reward, info = env.step(action, noise)
+				res_state = state
+				ens_done, epi_done = info['ens_done'], info['epi_done']
+				self.record((prev_state, prev_res_state, action, reward, state, res_state))
+				prev_state = state
+				prev_res_state = res_state
+			warmup = False
+			if warmups < self.buffer_capacity / agent.epi_steps:
+				warmups += 1			
+				epi_done = False
+				warmup = True
+		# else:
+		# 	while warmup:
+		# 		prev_state = env.reset(agent)
+		# 		prev_res_state = prev_state
+		# 		while epi_done == False:
+		# 			tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
+		# 			action, noise = agent.policy(tf_prev_state)
+		# 			state, reward, info = env.step(action, noise)
+		# 			res_state = state
+		# 			ens_done, epi_done = info['ens_done'], info['epi_done']
+		# 			self.record((prev_state, prev_res_state, action, reward, state, res_state))
+		# 			prev_state = state
+		# 			prev_res_state = res_state
+		# 		warmup = False
+		# 		if warmups < self.buffer_capacity / agent.epi_steps:
+		# 			warmups += 1			
+		# 			epi_done = False
+		# 			warmup = True
 
 # this update target parameters slowly based on rate `tau`, which is much less than one.
 @tf.function

@@ -1,1 +1,1 @@
-from .folsom import FolsomEnv
+from .folsom import Folsom

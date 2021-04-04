@@ -45,23 +45,34 @@ class Planner:
 	"""
 	This agent has access to information about the future at different time scales, so it can plan releases around expected inflows.
 	"""		
-	def __init__(self, env, weights_dir = None, max_epi = 100, eps = None):
+	def __init__(self, env, weights_dir = None, TD3 = True, warmup = True, eps = None, epi_start = 0, epi_steps = 5000, max_epi = 100):
+		self.agent_type = 'planner'
+		self.weights_dir = weights_dir
+		self.TD3 = TD3
+		self.warmup = warmup
 		self.env = env
+		self.epi_start = epi_start
+		self.epi_steps = epi_steps
+		self.max_epi = max_epi
+		self.epi_count = 0	
+		self.epi_reward_list = []
+		self.avg_reward_list = []
+		self.avg_action_list = []
+		self.epi_avg_reward_list = []				
 		self.upper_bound = env.action_space.high[0]
 		self.lower_bound = env.action_space.low[0]
 		self.eps = eps
-		self.env.eps = self.eps
-		# self.env.Q_df = self.env.Q_df
+		self.models = self.env.models
+		self.ensembles = self.env.ensembles
+		self.ens = self.env.ens # init to environment init data, can be stepped forward later
+		self.model = self.env.model # init to environment init data, can be stepped forward later
 		self.flows_format()
 		self.Q_num_inputs = len(self.env.Q_future.columns)
-		self.agent_type = 'planner'
-		self.weights_dir = weights_dir
-		self.max_epi = max_epi
 		self.reset()
 
 	@staticmethod
-	def create(env, weights_dir = None, max_epi = 100, eps = None):
-		obj = Planner(env, weights_dir = weights_dir, max_epi = max_epi, eps = eps)
+	def create(env, weights_dir = None, TD3 = True, warmup = True, eps = None, epi_start = 0, epi_steps = 5000, max_epi = 100):
+		obj = Planner(env, weights_dir = weights_dir, TD3 = TD3, warmup = warmup, eps = eps, epi_start = epi_start, epi_steps = epi_steps, max_epi = max_epi)
 		return obj, obj.env
 
 	def flows_format(self):
@@ -157,29 +168,27 @@ class Planner:
 		out = layers.Dense(256,activation="selu",kernel_initializer=initializer,kernel_regularizer='l2')(out)
 		out = tf.keras.layers.BatchNormalization()(out)
 		out = layers.Dense(1,activation="tanh",kernel_initializer=last_init,kernel_regularizer='l2')(out)
-
-		# Outputs single value for give state-action
+		# outputs single value for give state-action
 		model = tf.keras.Model([res_input,act_input], out)	
-
 		return model
 
-	def policy(self, res_state, noise_object, actor_model, epi_count):
+	def policy(self, res_state):
 		"""
 		`policy()` returns an action sampled from our Actor network plus some noise for
 		exploration.
 		"""
-		sampled_actions = tf.squeeze(actor_model(res_state))
+		sampled_actions = tf.squeeze(self.actor(res_state))
 		draw = np.random.uniform(0,1)
 		if self.eps is None:
-			if draw > epi_count/self.max_epi:
-				noise = noise_object()
+			if draw > self.epi_count/self.max_epi:
+				noise = self.noise_object()
 				sampled_actions = sampled_actions.numpy() + noise
 			else:
 				noise = 0.
 				sampled_actions = sampled_actions.numpy()
 		else:	
 			if draw < self.eps:
-				noise = noise_object()
+				noise = self.noise_object()
 				sampled_actions = sampled_actions.numpy() + noise
 			else:
 				noise = 0.

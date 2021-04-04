@@ -38,7 +38,7 @@ def volume_to_height(S):  # from HOBBES data
 	ep = np.array([210, 305, 332, 351, 365, 376, 385, 401, 437, 466])
 	return np.interp(S, sp, ep)
 
-class FolsomEnv():
+class Folsom():
 	"""
 	Environment for the Folsom Reservoir model compatible with OpenAI gym, baselines RL implementations, and extensions (stable-baselines)
 	Accepts image data as input, daily time step.
@@ -49,20 +49,20 @@ class FolsomEnv():
 	cfs_to_taf = 2.29568411 * 10**-5 * 86400 / 1000
 	taf_to_cfs = 1000 / 86400 * 43560
 
-	def __init__(self, DATA_DIR, obs_dim = None, res_dim = None, forecast = False, stack = 0, inflow_stack = 0, epi_count = 0, epi_length = 1000, ens='r1i1p1',): 
-		super(FolsomEnv,self).__init__()
+	def __init__(self, DATA_DIR, obs_dim = None, res_dim = None, stack = 0, inflow_stack = 0, models = ['canesm2',], ensembles = ['r1i1p1',]): 
+		super(Folsom,self).__init__()
 		
 		self.DATA_DIR = DATA_DIR
-		self.ens = ens
-		self.forecast = forecast
+		self.models = models
+		self.ensembles = ensembles
+		self.ens = self.ensembles[0]
+		self.model = self.models[0]
 		self.obs_dim = obs_dim
 		self.res_dim = res_dim
 		self.stack = stack
 		self.inflow_stack = inflow_stack
 		self.cfs_to_taf = 2.29568411 * 10**-5 * 86400 / 1000
 		self.taf_to_cfs = 1000 / 86400 * 43560
-		self.epi_count = 0
-		self.epi_length = epi_length
 
 		# initialize reservoir model
 		self.K = 975  # capacity, TAF
@@ -87,16 +87,18 @@ class FolsomEnv():
 		else:
 			self.observation_space = self.reservoir_space
 
-	def reset(self, agent_type='planner', model='canesm2', ens='r1i1p1', epi_start=0):
+	def reset(self, agent):
 		"""
 		Important: the observation must be a numpy array
 		:return: (np.array) 
 		"""
 
-		self.agent_type = agent_type
-		self.ens = ens
-		self.model = model
-		self.t_start = epi_start
+		self.agent_type = agent.agent_type
+		self.ens = agent.ens
+		self.model = agent.model
+		self.t_start = agent.epi_start
+		self.epi_count = agent.epi_count
+		self.epi_steps = agent.epi_steps
 		self.MODEL_DIR = self.DATA_DIR / self.model
 		# read in inflows:
 		# self.FLOWS_DIR = DATA_DIR / (self.model + '_meteo') # in general case
@@ -120,25 +122,23 @@ class FolsomEnv():
 		self.start_date = self.time_vector[self.t]
 
 		# generate first observation:
-		if self.agent_type == 'planner':
-			if self.epi_count == 0:
+		if agent.agent_type == 'planner':
+			if agent.epi_count == 0 and not agent.warmup:
 				print('Training start date and ensemble member: ',self.start_date,self.ens)
-				print('Observation : ',self.observation_space.shape)
-				if self.forecast:
-					print('Forecast: (add description later)')
+				# print('Observation : ',self.observation_space.shape)
 			self.observation = np.array([self.S[self.t],float(self.doy),]+list(self.Q_future_numpy[self.t,:]))
-		elif self.agent_type == 'baseline' or self.agent_type == 'spatial_climate':
+		elif agent.agent_type == 'baseline' or agent.agent_type == 'spatial_climate':
 			self.observation = np.array([self.S[self.t],float(self.doy),])
 			self.data = xr.open_mfdataset(self.MODEL_DIR.rglob('*scaled*{}*.nc'.format(self.ens)),combine='by_coords',)
 			self.data_vars = self.data.data_vars
 			self.data = self.data.to_stacked_array('channel',sample_dims=['time','lat','lon']).values
-			if self.epi_count == 0:			
+			if agent.epi_count == 0:			
 				print('Observation (Time,Height,Width,Variable): ',self.observation.shape)
 				print('Data variable dimension order: ',self.data_vars)
 				assert len(self.Q_df) == self.data.shape[0], 'length of climate data != length of inflow record'
 			self.observation = self.data[(self.t-self.stack):self.t,:,:,:]
 		# elif self.agent_type == 'scalar_climate':
-		elif self.agent_type == 'random':
+		elif agent.agent_type == 'random':
 			self.observation = np.array([self.S[self.t],float(self.doy),])
 
 		return self.observation
@@ -175,14 +175,14 @@ class FolsomEnv():
 			self.observation = np.array([self.S[self.t],float(self.doy),])				
 		# elif self.agent_type == 'scalar_climate':
 		self.info = {'epi_done':False,'ens_done':False}
-		if self.t-self.t_start == self.epi_length:
+		if self.t-self.t_start >= self.epi_steps:
 			self.info['epi_done'] = True
-		if self.t == self.T - 1:
+		if self.t >= self.T - 1:
 			self.info['ens_done'], self.info['epi_done'] = True, True
 		self.rewards[self.t] = self.reward
 		return self.observation, self.reward, self.info
 
-	def render(self, STOR_DIR = None, mode = ['figures']):
+	def render(self, agent = None, STOR_DIR = None, mode = ['figures']):
 		# if mode != 'console':
 		# 	raise NotImplementedError()
 		if 'console' in mode:
@@ -221,10 +221,10 @@ class FolsomEnv():
 			plt.savefig(STOR_DIR / f'results_sim_{self.epi_count:05}.png',dpi=400)
 			plt.close('all')
 
-			avg_df = {'Episodic Rewards': self.epi_reward_list,
-						'Avg. Episodic Rewards': self.epi_avg_reward_list,	
-						'Average Rewards': self.avg_reward_list,
-						'Average Actions': self.avg_action_list,
+			avg_df = {'Episodic Rewards': agent.epi_reward_list,
+						'Avg. Episodic Rewards': agent.epi_avg_reward_list,	
+						'Average Rewards': agent.avg_reward_list,
+						'Average Actions': agent.avg_action_list,
 						}
 			avg_df = pd.DataFrame.from_dict(avg_df)
 			avg_df.to_csv(STOR_DIR / 'results_averages.csv')
@@ -243,7 +243,7 @@ class FolsomEnv():
 			plt.close('all')
 
 			fig,axes = plt.subplots(figsize=(7,5))
-			axes.plot(range(1,self.epi_count+1),self.epi_avg_reward_list,label='Avg. Reward (last 40 40-yr episodes)',c = 'Blue')
+			axes.plot(range(1,self.epi_count+1),agent.epi_avg_reward_list,label='Avg. Reward (last 40 40-yr episodes)',c = 'Blue')
 			axes.axhline(-5783*40,label='40-yr Zero-Release Penalty',c='Red')
 			axes.set_xlabel('Episode')
 			axes.set_ylabel('Penalty')
