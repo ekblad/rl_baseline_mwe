@@ -27,7 +27,7 @@ def get_actor(env):
 	# state_out = layers.Flatten()(state_out)
 
 	res_input = layers.Input(shape=env.reservoir_space.shape)
-	res_out = layers.experimental.preprocessing.Rescaling(scale=[1./env.K,1./365]+[1./env.Q_max for i in np.arange(env.inflow_stack)])(res_input)
+	res_out = layers.experimental.preprocessing.Rescaling(scale=[1./env.K,1./365])(res_input)
 	res_out = layers.Dense(32,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(res_input)		
 	res_out = layers.Dense(32,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)
 
@@ -36,7 +36,7 @@ def get_actor(env):
 	out = layers.Dense(64,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)		
 	out = layers.Dense(64,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(out)
 	out = layers.Dense(1,activation='sigmoid',kernel_initializer=last_init,kernel_regularizer='l2')(out)
-	out = out*env.action_space.high[0]
+	out = env.action_space.low[0] + out*(env.action_space.high[0] - env.action_space.low[0])
 	model = tf.keras.Model(res_input,out)
 	return model
 
@@ -58,7 +58,7 @@ def get_critic(env):
 	# reservoir input
 	res_input = layers.Input(shape=env.reservoir_space.shape)
 	# res_out = layers.experimental.preprocessing.Normalization(dtype=tf.float32,mean=[])(res_input) # need this?
-	res_out = layers.experimental.preprocessing.Rescaling(scale=[1./env.K,1./365]+[1./env.Q_max for i in np.arange(env.inflow_stack)])(res_input)
+	res_out = layers.experimental.preprocessing.Rescaling(scale=[1./env.K,1./365])(res_input)
 	res_out = layers.Dense(32,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)		
 	res_out = layers.Dense(32,activation='relu',kernel_initializer=initializer,kernel_regularizer='l2')(res_out)
 
