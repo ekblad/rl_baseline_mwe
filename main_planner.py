@@ -76,8 +76,8 @@ def main():
 
 	# discount factor for future rewards
 	gamma = 0.99
-	batch_size = 1000
-	buffer_capacity = 100*epi_steps
+	batch_size = 100
+	buffer_capacity = 10*epi_steps
 	agent.buffer = Buffer(env, agent, buffer_capacity, batch_size, gamma)
 
 	"""
@@ -134,7 +134,7 @@ def main():
 			agent.avg_action_list.append(average_action)
 			agent.epi_avg_reward_list.append(np.mean(agent.epi_reward_list[-40:]))
 
-			if agent.epi_count % 10 == 0:
+			if agent.epi_count % 5 == 0:
 				# save the weights every n episodes
 				agent.save_weights(agent.epi_count,STOR_DIR)
 				env.render(agent=agent,STOR_DIR=STOR_DIR,mode=['console','figures'])

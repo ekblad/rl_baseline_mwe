@@ -243,7 +243,7 @@ class Folsom():
 			plt.close('all')
 
 			fig,axes = plt.subplots(figsize=(7,5))
-			axes.plot(range(1,self.epi_count+1),agent.epi_avg_reward_list,label='Avg. Reward (last 40 40-yr episodes)',c = 'Blue')
+			axes.plot(range(0,self.epi_count+1),agent.epi_avg_reward_list,label='Avg. Reward (last 40 40-yr episodes)',c = 'Blue')
 			axes.axhline(-5783*40,label='40-yr Zero-Release Penalty',c='Red')
 			axes.set_xlabel('Episode')
 			axes.set_ylabel('Penalty')
