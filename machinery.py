@@ -239,3 +239,14 @@ class Buffer:
 def update_target(target_weights, weights, tau):
 	for (a, b) in zip(target_weights, weights):
 		a.assign(b * tau + a * (1. - tau))
+
+def anneal_lr(optimizers, epi_count, max_epi, method = 'linear'):
+	for opt in optimizers:
+		if method == 'linear':
+			opt.lr = opt.lr*(1.-epi_count/max_epi)
+		elif method == 'exponential':
+			opt.lr = opt.lr*(1./epi_count)
+
+
+
+

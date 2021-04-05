@@ -54,7 +54,7 @@ class Planner:
 		self.epi_start = epi_start
 		self.epi_steps = epi_steps
 		self.max_epi = max_epi
-		self.epi_count = 1	
+		self.epi_count = 0	
 		self.epi_reward_list = []
 		self.avg_reward_list = []
 		self.avg_action_list = []

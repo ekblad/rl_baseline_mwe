@@ -17,7 +17,7 @@ from agents import Planner
 def main():
 
 	DATA_DIR = Path.cwd()
-	STOR_DIR = DATA_DIR / 'results_planner_8'
+	STOR_DIR = DATA_DIR / 'results_planner_10'
 	STOR_DIR.mkdir(exist_ok=True)
 	# OLD_DIR = DATA_DIR / 'results_planner_5'
 	OLD_DIR = None
@@ -29,7 +29,7 @@ def main():
 	eps = 0.1 # if not None, use epsilon-greedy action exploration strategy
 	epi_start = 30 * 365 # day of ensemble member to start episode on
 	epi_steps = 40 * 365 # length of episode in days
-	max_epi = 1000 # upper bound used to determine annealing schedule (if not epsilon-greedy)	
+	max_epi = 100 # upper bound used to determine annealing schedule (if not epsilon-greedy)	
 	models = ['canesm2',]
 	ensembles = ['r1i1p1' for i in np.arange(0,10)]
 
@@ -59,8 +59,8 @@ def main():
 	agent.noise_object = OUActionNoise(mean=np.zeros(1), std_deviation=float(std_dev) * np.ones(1)) 
 
 	# learning rate for actor-critic models:
-	actor_lr = 10e-8 # slowest learner
-	critic_lr = 10e-8 # should learn faster than actor
+	actor_lr = 10e-7 # slowest learner
+	critic_lr = 10e-7 # should learn faster than actor
 
 	# learning rate used to update target networks:
 	tau = 10e-2 # the target actor and critic networks slowly take the actor/critic weights
@@ -77,7 +77,7 @@ def main():
 	# discount factor for future rewards
 	gamma = 0.99
 	batch_size = 100
-	buffer_capacity = 100*epi_steps
+	buffer_capacity = 25*epi_steps
 	agent.buffer = Buffer(env, agent, buffer_capacity, batch_size, gamma)
 
 	"""
@@ -97,7 +97,8 @@ def main():
 		print('Running data from ensemble member: {}'.format(ens))
 		average_reward, average_action, ens_done = 0, 0, False
 		while ens_done == False:
-			agent.epi_count += 1			
+			agent.epi_count += 1
+			anneal_lr([agent.critic_optimizer,agent.critic2_optimizer,agent.actor_optimizer],agent.epi_count,agent.max_epi,method='linear')			
 			prev_state = env.reset(agent)
 			prev_res_state, episodic_reward, episodic_action, agent.epi_done = prev_state, 0, 0, False
 			while agent.epi_done == False:
@@ -114,7 +115,7 @@ def main():
 
 				agent.buffer.record((prev_state, prev_res_state, action, reward, state, res_state))
 				if agent.buffer.TD3:
-					if env.t % 2:
+					if env.t % 2 == 0:
 						agent.buffer.learn_actor_critic(agent)
 						update_target(agent.target_actor.variables, agent.actor.variables, tau)
 						update_target(agent.target_critic.variables, agent.critic.variables, tau)	
